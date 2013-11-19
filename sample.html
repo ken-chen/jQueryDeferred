@@ -1,0 +1,271 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html<br> charset=ISO-8859-1">
+<title>IP Services</title>
+  <script type="text/javascript" src="/resources/js/jquery-1.6.1.min.js"></script>
+  <script type="text/javascript" src="/resources/js/jquery-ui-1.8.13.custom.min.js"></script>            
+  <script type="text/javascript" src="/resources/js/jquery.tools.min.js"></script>  
+  <script type="text/javascript" src="/resources/js/jquery.class.js"></script>
+  <script type="text/javascript" src="/resources/js/jquery.anchor.js"></script>
+  <script type="text/javascript" src="/resources/js/jquery.pngFix.js"></script>
+  <script type="text/javascript" src="/resources/js/jquery.form.js"></script>
+  <script type="text/javascript" src="/resources/js/jquery.scrollTo.js"></script>   
+  <script type="text/javascript" src="/resources/js/jquery.jgfeed-min.js"></script> 
+  <script type="text/javascript" src="/resources/js/jquery.cookie.js"></script> 
+  <script type="text/javascript" src="/resources/js/jquery.validate.js"></script>
+  <script type="text/javascript" src="//j.maxmind.com/js/apis/geoip2/v2.0/geoip2.js"></script>
+  <script type="text/javascript" src="/resources/js/holden.js"></script>
+  <script type="text/javascript" src="/resources/js/holden-1.0.js"></script>
+  
+<!-- http://preprod.holden.com.au/Satellite?pagename=Tools/IPTest -->
+
+<script type="text/javascript">
+
+function createCookie(name,value,days) {
+	if (days) {
+		var date = new Date();
+		date.setTime(date.getTime()+(days*24*60*60*1000));
+		var expires = "; expires="+date.toGMTString();
+	}
+	else var expires = "";
+	document.cookie = name+"="+value+expires+"; path=/";
+}
+
+function readCookie(name) {
+	var nameEQ = name + "=";
+	var ca = document.cookie.split(';');
+	for(var i=0;i < ca.length;i++) {
+		var c = ca[i];
+		while (c.charAt(0)==' ') c = c.substring(1,c.length);
+		if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
+	}
+	return null;
+}
+
+
+(function (HLD) {
+	'use strict'
+
+	HLD.Desktop = HLD.Desktop || {};
+	//magic here: deffered 
+	var jqDeffered = jQuery.Deferred(),
+		geoLocation,
+		countryName,
+		geoLatitude,
+		geoLongitude,
+		googleGEOCoding,
+		postalCode,
+		//Method varibles
+		getGEOLocationinformation;
+
+
+	//private functions
+	getGEOLocationinformation = function() {
+			var onSuccess = function(location){		
+					
+					geoLocation = location;
+					countryName = geoLocation.country.names.en;
+					geoLatitude = geoLocation.location.latitude;
+					geoLongitude = geoLocation.location.longitude;
+					postalCode = geoLocation.postal.code; 
+					
+					if(postalCode==null && "Australia" == countryName ){
+						 getPostcodeFromGeocodingReverse(geoLatitude,geoLongitude);
+
+					}else{
+						createCookie("accSelectedPostcode",postalCode,"30");
+					}
+					jqDeffered.resolve(geoLocation);
+			};
+		
+			var onError = function(error){	
+				geoLocation.status ="error";
+				jqDeffered.resolve(geoLocation);
+			};
+		
+			$.ajaxSetup({"error":function(XMLHttpRequest,textStatus, errorThrown) {   
+				geoLocation="The service is not available, please try again later";
+				jqDeffered.resolve(geoLocation);
+			  }});
+			
+			geoip2.city(onSuccess, onError, { w3cGeolocationDisabled: true });
+			
+		
+	};
+	
+	var getPostcodeFromGeocodingReverse = function (geoLatitude,geoLongitude){
+
+		var serviceUrl="http://maps.googleapis.com/maps/api/geocode/json?latlng="+geoLatitude+","+geoLongitude+"&sensor=false";
+					 
+		$.getJSON(serviceUrl, function(data) {
+			if(data.status == "OK"){
+				googleGEOCoding =data;
+				postalCode= data.results[0].address_components[5].long_name;
+				geoLocation.postal.code = postalCode;
+				geoLocation.status ="OK";
+				//set the postcode in the goobal cookie
+				createCookie("accSelectedPostcode",postalCode,"30");
+			}else{
+				geoLocation.status ="error";
+			}
+			//margic deffed resolve
+			jqDeffered.resolve(geoLocation);
+		});	
+	};
+	
+	//public functions
+	HLD.Desktop.GEOInformation = {
+		init: function() {
+			var postcode =readCookie("accSelectedPostcode");
+			
+			// If no postcode, prompt
+			if (postcode === null || postcode == undefined || postcode == "") {
+				 getGEOLocationinformation();
+			}else{
+				jqDeffered.resolve(geoLocation);
+			}
+		},
+
+		checkPostcode: jqDeffered
+	}
+
+}(window.HLD || {}));
+
+/*
+//on DOM load
+$(function () {
+	HLD.Desktop.GEOInformation.init();
+});
+*/
+//on DOM load
+$(function () {
+	$("#another").hide();
+	
+	HLD.Desktop.GEOInformation.init();
+	var postcode =readCookie("accSelectedPostcode");
+	if (postcode === null || postcode == undefined || postcode == "") {
+		HLD.Desktop.GEOInformation.checkPostcode.then(function(geo){
+			console.log("deffered ready? ", geo);
+		
+			if(geo.postal.code !=null){
+				var geoTables = [];
+				postalCode= geo.postal.code;
+				countrycode = geo.country.iso_code;
+				geoIPAddress = geo.traits.ip_address;
+				countryName = geo.country.names.en;
+				geoLatitude = geo.location.latitude;
+				geoLongitude = geo.location.longitude;
+				
+				
+				geoTables.push("<tr><td>Your Country:</td><td>"+ countryName +"</td></tr>");
+				geoTables.push("<tr><td>Your IP Address:</td><td>"+ geoIPAddress +"</td></tr>");
+				geoTables.push("<tr><td>Your geoLatitude:</td><td>"+ geoLatitude +"</td></tr>");
+				geoTables.push("<tr><td>Your geoLongitude:</td><td>"+ geoLongitude +"</td></tr>");
+				geoTables.push("<tr><td>Your PostCode Address:</td><td>"+ postalCode +"</td></tr>");
+				$("#geoTable").empty();
+				$(geoTables.join('')).appendTo('#geoTable');
+			    $("#status").html(
+				        "Lookup successful:\n\n"
+				        + JSON.stringify(geo, undefined, 4)
+				 );	
+				$("#another").show(); 
+			}
+		});
+	}else{
+	    $("#status").html(
+			    "Postcode already set in the  cookie , and the postcode value is " + postcode        
+		);
+	    
+		$("#another").show(); 
+	}
+	
+	
+
+});
+
+
+$(document).ready(function() {
+	$("#formIPAddress").submit(function() {
+		$("#geoTable").html(""); 
+		$("#status").html(""); 
+		var IpAddressing = $("#IpAddress").val();
+		var result
+		var serviceUrl="http://www.maxmind.com/geoip/v2.0/city_isp_org/"+ IpAddressing+ "?demo=1";
+		 
+		$.getJSON(serviceUrl, function(geoLocation) {
+			
+			result = geoLocation;
+			var countryName = geoLocation.country.names.en;
+			var geoLatitude = geoLocation.location.latitude;
+			var geoLongitude = geoLocation.location.longitude;
+
+			if("Australia" == countryName){
+				var serviceUrl="http://maps.googleapis.com/maps/api/geocode/json?latlng="+geoLatitude+","+geoLongitude+"&sensor=false";
+				 
+				$.getJSON(serviceUrl, function(data) {
+					if(data.status == "OK"){
+						var postalCode= data.results[0].address_components[5].long_name;
+						result.postcode = postalCode;
+					    $("#status").html(
+						        "Lookup successful:\n\n"
+						        + JSON.stringify(result, undefined, 4)
+						 );	
+					}
+				});	
+			}else{
+				 $("#status").html(
+					        "Lookup successful:\n\n"
+					        + JSON.stringify(result, undefined, 4)
+					 );	
+				
+			} 
+			
+			
+		});	
+		
+		//http://www.maxmind.com/geoip/v2.0/city_isp_org/203.161.146.192?demo=1
+	});	
+});
+
+</script>
+
+
+<body>
+<div id="wrapper">
+<h1>IP Services</h1>
+<table border="1" id="geoTable">
+</table>
+
+<h3 id="status">Please wait, IP automatic location detection service is running~~~~</h3>
+				
+				
+<div id="another">
+	<div style="color:#900;font-size:13px;padding:3px;text-align:center;background-color:yellow;"> <a href="/">Try Get Information for the IP address?</a></div>
+
+	<form name="formIPAddress" id="formIPAddress" method="POST" action="#" onsubmit="return false">
+		<div style="text-align:center;padding-top:15px;">
+			<input name="IpAddress" value="" id="IpAddress" maxlength="15" style="width:135px;font-weight:bold;" type="text">
+			<input name="submit" value="Get Information for this IP" type="submit">
+		</div>
+	</form>
+</div>				
+</div>	
+</body>
+</html>
+
